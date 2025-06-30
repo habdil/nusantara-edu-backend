@@ -1,0 +1,754 @@
+// NusantaraEdu: Management Information System for Elementary School Principals in Indonesia
+// Prisma Schema (converted from DBML)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums for status and categories
+enum UserRoles {
+  admin
+  principal
+  teacher
+  school_admin_staff
+  education_department
+}
+
+enum AttendanceStatus {
+  present
+  excused
+  sick
+  unexcused
+}
+
+enum Gender {
+  male
+  female
+}
+
+enum TaskStatus {
+  ongoing
+  completed
+  overdue
+  canceled
+}
+
+enum ConditionStatus {
+  good
+  minor_damage
+  major_damage
+  under_repair
+}
+
+enum WarningCategory {
+  attendance
+  academic
+  financial
+  asset
+  teacher
+  deadline
+  system
+}
+
+enum UrgencyLevel {
+  low
+  medium
+  high
+  critical
+}
+
+// Users and Authentication
+model User {
+  id               Int       @id @default(autoincrement())
+  username         String    @unique
+  passwordHash     String    @map("password_hash")
+  email            String    @unique
+  role             UserRoles
+  fullName         String    @map("full_name")
+  phoneNumber      String?   @map("phone_number")
+  profilePicture   String?   @map("profile_picture")
+  lastLogin        DateTime? @map("last_login")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime? @updatedAt @map("updated_at")
+  isActive         Boolean   @default(true) @map("is_active")
+
+  // Relations
+  principalSchools     School[]                @relation("SchoolPrincipal")
+  studentAttendance    StudentAttendance[]     @relation("AttendanceRecorder")
+  teacherAttendance    TeacherAttendance[]     @relation("TeacherAttendanceRecorder")
+  teacherEvaluations   TeacherPerformance[]    @relation("PerformanceEvaluator")
+  financeApprovals     SchoolFinance[]         @relation("FinanceApprover")
+  financialTransactions FinancialTransaction[] @relation("TransactionRecorder")
+  facilityUsage        FacilityUsage[]
+  warningHandlers      EarlyWarning[]          @relation("WarningHandler")
+  aiChatHistory        AiChatHistory[]
+  reportCreators       Report[]                @relation("ReportCreator")
+  notifications        Notification[]
+  dashboardPreferences DashboardPreference[]
+  activityLogs         ActivityLog[]
+
+  @@map("users")
+}
+
+// Schools
+model School {
+  id               Int       @id @default(autoincrement())
+  npsn             String    @unique // National School Principal Number
+  schoolName       String    @map("school_name")
+  fullAddress      String    @map("full_address")
+  postalCode       String?   @map("postal_code")
+  phoneNumber      String?   @map("phone_number")
+  email            String?
+  website          String?
+  principalId      Int?      @map("principal_id")
+  totalStudents    Int?      @map("total_students")
+  totalTeachers    Int?      @map("total_teachers")
+  totalStaff       Int?      @map("total_staff")
+  establishedYear  Int?      @map("established_year")
+  accreditation    String?
+  logoUrl          String?   @map("logo_url")
+  latitude         Decimal?
+  longitude        Decimal?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  principal            User?                 @relation("SchoolPrincipal", fields: [principalId], references: [id])
+  teachers             Teacher[]
+  students             Student[]
+  finances             SchoolFinance[]
+  assets               Asset[]
+  facilities           Facility[]
+  kpis                 SchoolKpi[]
+  earlyWarnings        EarlyWarning[]
+  aiRecommendations    AiRecommendation[]
+  aiChatHistory        AiChatHistory[]
+  benchmarks           SchoolBenchmark[]
+  reports              Report[]
+  dashboardPreferences DashboardPreference[]
+  activityLogs         ActivityLog[]
+
+  @@index([npsn])
+  @@index([schoolName, fullAddress], name: "school_location")
+  @@map("schools")
+}
+
+// Teachers
+model Teacher {
+  id                Int       @id @default(autoincrement())
+  employeeId        String?   @unique @map("employee_id") // Employee Identification Number
+  fullName          String    @map("full_name")
+  schoolId          Int       @map("school_id")
+  gender            Gender
+  birthDate         DateTime? @map("birth_date") @db.Date
+  address           String?
+  email             String?
+  phoneNumber       String?   @map("phone_number")
+  subjectArea       String    @map("subject_area")
+  position          String?
+  employmentStatus  String?   @map("employment_status")
+  educationLevel    String?   @map("education_level")
+  teachingStartYear Int?      @map("teaching_start_year")
+  profilePhoto      String?   @map("profile_photo")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  school              School                    @relation(fields: [schoolId], references: [id])
+  academicRecords     AcademicRecord[]
+  attendance          TeacherAttendance[]
+  performance         TeacherPerformance[]
+  developments        TeacherDevelopment[]
+
+  @@index([employeeId])
+  @@index([schoolId], name: "teacher_school")
+  @@index([subjectArea], name: "teacher_subject")
+  @@map("teachers")
+}
+
+// Students
+model Student {
+  id                  Int       @id @default(autoincrement())
+  studentId           String    @unique @map("student_id") // Student Identification Number
+  nationalStudentId   String?   @unique @map("national_student_id") // National Student Identification Number
+  fullName            String    @map("full_name")
+  schoolId            Int       @map("school_id")
+  grade               String
+  gender              Gender
+  birthDate           DateTime? @map("birth_date") @db.Date
+  address             String?
+  parentName          String?   @map("parent_name")
+  parentContact       String?   @map("parent_contact")
+  studentPhoto        String?   @map("student_photo")
+  enrollmentDate      DateTime  @map("enrollment_date") @db.Date
+  isActive            Boolean   @default(true) @map("is_active")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  school                  School                    @relation(fields: [schoolId], references: [id])
+  academicRecords         AcademicRecord[]
+  competencyAchievements  CompetencyAchievement[]
+  attendance              StudentAttendance[]
+
+  @@index([studentId])
+  @@index([nationalStudentId])
+  @@index([schoolId, grade], name: "student_class")
+  @@map("students")
+}
+
+// Subjects
+model Subject {
+  id            Int       @id @default(autoincrement())
+  subjectCode   String    @unique @map("subject_code")
+  subjectName   String    @map("subject_name")
+  description   String?
+  gradeLevel    String    @map("grade_level")
+  weeklyHours   Int?      @map("weekly_hours")
+  curriculum    String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  academicRecords     AcademicRecord[]
+  basicCompetencies   BasicCompetency[]
+
+  @@index([subjectCode])
+  @@index([subjectName, gradeLevel], name: "subject_grade")
+  @@map("subjects")
+}
+
+// Academic Records
+model AcademicRecord {
+  id                 Int       @id @default(autoincrement())
+  studentId          Int       @map("student_id")
+  subjectId          Int       @map("subject_id")
+  teacherId          Int       @map("teacher_id")
+  semester           String
+  academicYear       String    @map("academic_year")
+  knowledgeScore     Decimal?  @map("knowledge_score")
+  skillScore         Decimal?  @map("skill_score")
+  attitudeScore      String?   @map("attitude_score")
+  midtermExamScore   Decimal?  @map("midterm_exam_score")
+  finalExamScore     Decimal?  @map("final_exam_score")
+  finalScore         Decimal?  @map("final_score")
+  teacherNotes       String?   @map("teacher_notes")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id])
+  subject Subject @relation(fields: [subjectId], references: [id])
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@unique([studentId, subjectId, semester, academicYear], name: "student_subject_period")
+  @@map("academic_records")
+}
+
+// Basic Competencies
+model BasicCompetency {
+  id                     Int       @id @default(autoincrement())
+  subjectId              Int       @map("subject_id")
+  competencyCode         String    @map("competency_code")
+  competencyDescription  String    @map("competency_description")
+  difficultyLevel        String?   @map("difficulty_level")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  subject                Subject                   @relation(fields: [subjectId], references: [id])
+  competencyAchievements CompetencyAchievement[]
+
+  @@unique([subjectId, competencyCode], name: "subject_competency")
+  @@map("basic_competencies")
+}
+
+// Competency Achievements
+model CompetencyAchievement {
+  id                 Int       @id @default(autoincrement())
+  studentId          Int       @map("student_id")
+  basicCompetencyId  Int       @map("basic_competency_id")
+  semester           String
+  academicYear       String    @map("academic_year")
+  score              Decimal?
+  isAchieved         Boolean?  @map("is_achieved")
+  notes              String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  student         Student         @relation(fields: [studentId], references: [id])
+  basicCompetency BasicCompetency @relation(fields: [basicCompetencyId], references: [id])
+
+  @@unique([studentId, basicCompetencyId, semester, academicYear], name: "student_competency_period")
+  @@map("competency_achievements")
+}
+
+// Student Attendance
+model StudentAttendance {
+  id           Int              @id @default(autoincrement())
+  studentId    Int              @map("student_id")
+  date         DateTime         @db.Date
+  status       AttendanceStatus
+  checkInTime  DateTime?        @map("check_in_time") @db.Time
+  checkOutTime DateTime?        @map("check_out_time") @db.Time
+  notes        String?
+  recordedBy   Int?             @map("recorded_by")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime?        @updatedAt @map("updated_at")
+
+  // Relations
+  student  Student @relation(fields: [studentId], references: [id])
+  recorder User?   @relation("AttendanceRecorder", fields: [recordedBy], references: [id])
+
+  @@unique([studentId, date], name: "student_date")
+  @@map("student_attendance")
+}
+
+// Teacher Attendance
+model TeacherAttendance {
+  id           Int              @id @default(autoincrement())
+  teacherId    Int              @map("teacher_id")
+  date         DateTime         @db.Date
+  status       AttendanceStatus
+  checkInTime  DateTime?        @map("check_in_time") @db.Time
+  checkOutTime DateTime?        @map("check_out_time") @db.Time
+  notes        String?
+  recordedBy   Int?             @map("recorded_by")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime?        @updatedAt @map("updated_at")
+
+  // Relations
+  teacher  Teacher @relation(fields: [teacherId], references: [id])
+  recorder User?   @relation("TeacherAttendanceRecorder", fields: [recordedBy], references: [id])
+
+  @@unique([teacherId, date], name: "teacher_date")
+  @@map("teacher_attendance")
+}
+
+// Teacher Performance
+model TeacherPerformance {
+  id                     Int       @id @default(autoincrement())
+  teacherId              Int       @map("teacher_id")
+  evaluationPeriod       String    @map("evaluation_period")
+  academicYear           String    @map("academic_year")
+  disciplineScore        Decimal?  @map("discipline_score")
+  teachingScore          Decimal?  @map("teaching_score")
+  selfDevelopmentScore   Decimal?  @map("self_development_score")
+  contributionScore      Decimal?  @map("contribution_score")
+  totalScore             Decimal?  @map("total_score")
+  evaluationNotes        String?   @map("evaluation_notes")
+  evaluatorId            Int?      @map("evaluator_id")
+  evaluationDate         DateTime? @map("evaluation_date") @db.Date
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  teacher                    Teacher                      @relation(fields: [teacherId], references: [id])
+  evaluator                  User?                        @relation("PerformanceEvaluator", fields: [evaluatorId], references: [id])
+  teacherPerformanceDetails  TeacherPerformanceDetail[]
+
+  @@unique([teacherId, evaluationPeriod, academicYear], name: "teacher_evaluation_period")
+  @@map("teacher_performance")
+}
+
+// Teacher Performance Details
+model TeacherPerformanceDetail {
+  id                     Int       @id @default(autoincrement())
+  teacherPerformanceId   Int       @map("teacher_performance_id")
+  assessmentCategory     String    @map("assessment_category")
+  indicator              String
+  score                  Decimal
+  notes                  String?
+  supportingEvidence     String?   @map("supporting_evidence")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  teacherPerformance TeacherPerformance @relation(fields: [teacherPerformanceId], references: [id])
+
+  @@unique([teacherPerformanceId, assessmentCategory, indicator], name: "performance_indicator")
+  @@map("teacher_performance_details")
+}
+
+// Teacher Development
+model TeacherDevelopment {
+  id              Int       @id @default(autoincrement())
+  teacherId       Int       @map("teacher_id")
+  developmentType String    @map("development_type")
+  activityName    String    @map("activity_name")
+  organizer       String?
+  startDate       DateTime? @map("start_date") @db.Date
+  endDate         DateTime? @map("end_date") @db.Date
+  totalHours      Int?      @map("total_hours")
+  certificate     String?
+  description     String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@index([teacherId, developmentType], name: "teacher_development_type")
+  @@map("teacher_developments")
+}
+
+// School Finances
+model SchoolFinance {
+  id                    Int       @id @default(autoincrement())
+  schoolId              Int       @map("school_id")
+  budgetYear            String    @map("budget_year")
+  period                String
+  budgetCategory        String    @map("budget_category")
+  budgetAmount          Decimal   @map("budget_amount")
+  usedAmount            Decimal   @default(0) @map("used_amount")
+  remainingAmount       Decimal   @default(0) @map("remaining_amount")
+  notes                 String?
+  approvalStatus        Boolean?  @map("approval_status")
+  approvedBy            Int?      @map("approved_by")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  school                School                  @relation(fields: [schoolId], references: [id])
+  approver              User?                   @relation("FinanceApprover", fields: [approvedBy], references: [id])
+  financialTransactions FinancialTransaction[]
+
+  @@unique([schoolId, budgetYear, period, budgetCategory], name: "budget_category_period")
+  @@map("school_finances")
+}
+
+// Financial Transactions
+model FinancialTransaction {
+  id                Int       @id @default(autoincrement())
+  schoolFinanceId   Int       @map("school_finance_id")
+  transactionDate   DateTime  @map("transaction_date") @db.Date
+  description       String
+  amount            Decimal
+  transactionType   String    @map("transaction_type") // income or expense
+  transactionCategory String? @map("transaction_category")
+  transactionProof  String?   @map("transaction_proof")
+  recordedBy        Int?      @map("recorded_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  schoolFinance SchoolFinance @relation(fields: [schoolFinanceId], references: [id])
+  recorder      User?         @relation("TransactionRecorder", fields: [recordedBy], references: [id])
+
+  @@index([schoolFinanceId], name: "transaction_budget")
+  @@index([transactionDate], name: "transaction_date")
+  @@map("financial_transactions")
+}
+
+// Assets and Inventory
+model Asset {
+  id               Int             @id @default(autoincrement())
+  schoolId         Int             @map("school_id")
+  assetCode        String          @unique @map("asset_code")
+  assetName        String          @map("asset_name")
+  assetCategory    String          @map("asset_category")
+  acquisitionDate  DateTime?       @map("acquisition_date") @db.Date
+  acquisitionValue Decimal?        @map("acquisition_value")
+  usefulLife       Int?            @map("useful_life") // in months
+  condition        ConditionStatus
+  location         String?
+  notes            String?
+  qrCode           String?         @map("qr_code")
+  assetPhoto       String?         @map("asset_photo")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime?       @updatedAt @map("updated_at")
+
+  // Relations
+  school           School            @relation(fields: [schoolId], references: [id])
+  maintenance      AssetMaintenance[]
+
+  @@index([assetCode])
+  @@index([schoolId, assetCategory], name: "school_asset_category")
+  @@map("assets")
+}
+
+// Asset Maintenance
+model AssetMaintenance {
+  id                   Int       @id @default(autoincrement())
+  assetId              Int       @map("asset_id")
+  maintenanceDate      DateTime  @map("maintenance_date") @db.Date
+  maintenanceType      String    @map("maintenance_type")
+  description          String?
+  cost                 Decimal?
+  technician           String?
+  maintenanceResult    String?   @map("maintenance_result")
+  nextMaintenanceDate  DateTime? @map("next_maintenance_date") @db.Date
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@index([assetId, maintenanceDate], name: "asset_maintenance_date")
+  @@map("asset_maintenance")
+}
+
+// School Facilities
+model Facility {
+  id            Int             @id @default(autoincrement())
+  schoolId      Int             @map("school_id")
+  facilityName  String          @map("facility_name")
+  facilityType  String          @map("facility_type")
+  capacity      Int?
+  location      String?
+  condition     ConditionStatus?
+  notes         String?
+  facilityPhoto String?         @map("facility_photo")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime?       @updatedAt @map("updated_at")
+
+  // Relations
+  school        School          @relation(fields: [schoolId], references: [id])
+  usage         FacilityUsage[]
+
+  @@unique([schoolId, facilityName], name: "school_facility")
+  @@map("facilities")
+}
+
+// Facility Usage
+model FacilityUsage {
+  id             Int       @id @default(autoincrement())
+  facilityId     Int       @map("facility_id")
+  date           DateTime  @db.Date
+  startTime      DateTime  @map("start_time") @db.Time
+  endTime        DateTime  @map("end_time") @db.Time
+  purpose        String
+  userId         Int?      @map("user_id")
+  approvalStatus String?   @map("approval_status")
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  facility Facility @relation(fields: [facilityId], references: [id])
+  user     User?    @relation(fields: [userId], references: [id])
+
+  @@index([facilityId, date, startTime, endTime], name: "facility_schedule")
+  @@map("facility_usage")
+}
+
+// School KPIs
+model SchoolKpi {
+  id                     Int       @id @default(autoincrement())
+  schoolId               Int       @map("school_id")
+  academicYear           String    @map("academic_year")
+  period                 String
+  kpiCategory            String    @map("kpi_category")
+  kpiName                String    @map("kpi_name")
+  targetValue            Decimal?  @map("target_value")
+  achievedValue          Decimal?  @map("achieved_value")
+  achievementPercentage  Decimal?  @map("achievement_percentage")
+  trend                  String?   // increasing, stable, decreasing
+  priority               Int?
+  analysis               String?
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  school School @relation(fields: [schoolId], references: [id])
+
+  @@unique([schoolId, academicYear, period, kpiName], name: "school_kpi_period")
+  @@map("school_kpis")
+}
+
+// Early Warnings
+model EarlyWarning {
+  id             Int             @id @default(autoincrement())
+  schoolId       Int             @map("school_id")
+  category       WarningCategory
+  title          String
+  description    String
+  urgencyLevel   UrgencyLevel    @map("urgency_level")
+  detectedDate   DateTime        @map("detected_date") @db.Date
+  targetValue    Decimal?        @map("target_value")
+  actualValue    Decimal?        @map("actual_value")
+  handlingStatus String?         @map("handling_status")
+  handledBy      Int?            @map("handled_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime?       @updatedAt @map("updated_at")
+
+  // Relations
+  school  School @relation(fields: [schoolId], references: [id])
+  handler User?  @relation("WarningHandler", fields: [handledBy], references: [id])
+
+  @@index([schoolId, category, urgencyLevel], name: "school_warning_category")
+  @@map("early_warnings")
+}
+
+// AI Recommendations
+model AiRecommendation {
+  id                     Int       @id @default(autoincrement())
+  schoolId               Int       @map("school_id")
+  category               String    // academic, financial, asset, teacher, etc
+  title                  String
+  description            String
+  supportingData         Json?     @map("supporting_data")
+  confidenceLevel        Decimal?  @map("confidence_level") // algorithm confidence level 0-1
+  generatedDate          DateTime  @map("generated_date") @db.Date
+  predictedImpact        String?   @map("predicted_impact")
+  implementationStatus   String?   @map("implementation_status")
+  principalFeedback      String?   @map("principal_feedback")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  school School @relation(fields: [schoolId], references: [id])
+
+  @@index([schoolId, category], name: "school_recommendation_category")
+  @@map("ai_recommendations")
+}
+
+// AI Chat History
+model AiChatHistory {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @map("user_id")
+  schoolId       Int       @map("school_id")
+  question       String
+  answer         String
+  topicCategory  String?   @map("topic_category")
+  isBookmarked   Boolean   @default(false) @map("is_bookmarked")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id])
+  school School @relation(fields: [schoolId], references: [id])
+
+  @@index([userId, schoolId], name: "user_school_chat")
+  @@map("ai_chat_history")
+}
+
+// National Standards
+model NationalStandard {
+  id              Int       @id @default(autoincrement())
+  category        String
+  standardName    String    @map("standard_name")
+  description     String?
+  minimumValue    Decimal?  @map("minimum_value")
+  unit            String?
+  gradeLevel      String?   @map("grade_level")
+  establishedYear Int?      @map("established_year")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  schoolBenchmarks SchoolBenchmark[]
+
+  @@unique([category, standardName], name: "standard_category")
+  @@map("national_standards")
+}
+
+// School Benchmarks
+model SchoolBenchmark {
+  id                  Int       @id @default(autoincrement())
+  schoolId            Int       @map("school_id")
+  nationalStandardId  Int       @map("national_standard_id")
+  academicYear        String    @map("academic_year")
+  schoolValue         Decimal?  @map("school_value")
+  districtRank        Int?      @map("district_rank")
+  provinceRank        Int?      @map("province_rank")
+  nationalRank        Int?      @map("national_rank")
+  notes               String?
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  school           School           @relation(fields: [schoolId], references: [id])
+  nationalStandard NationalStandard @relation(fields: [nationalStandardId], references: [id])
+
+  @@unique([schoolId, nationalStandardId, academicYear], name: "school_standard_year")
+  @@map("school_benchmarks")
+}
+
+// Reports
+model Report {
+  id               Int       @id @default(autoincrement())
+  schoolId         Int       @map("school_id")
+  reportTitle      String    @map("report_title")
+  reportType       String    @map("report_type")
+  reportPeriod     String    @map("report_period")
+  academicYear     String    @map("academic_year")
+  fileFormat       String?   @map("file_format")
+  fileUrl          String?   @map("file_url")
+  createdBy        Int?      @map("created_by")
+  createdDate      DateTime? @map("created_date")
+  submissionStatus String?   @map("submission_status")
+  submissionDate   DateTime? @map("submission_date")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  school  School @relation(fields: [schoolId], references: [id])
+  creator User?  @relation("ReportCreator", fields: [createdBy], references: [id])
+
+  @@index([schoolId, reportType, reportPeriod, academicYear], name: "school_report_period")
+  @@map("reports")
+}
+
+// Notifications
+model Notification {
+  id               Int       @id @default(autoincrement())
+  userId           Int       @map("user_id")
+  title            String
+  message          String
+  notificationType String?   @map("notification_type")
+  isRead           Boolean   @default(false) @map("is_read")
+  relatedLink      String?   @map("related_link")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead], name: "user_unread")
+  @@map("notifications")
+}
+
+// Dashboard Preferences
+model DashboardPreference {
+  id               Int       @id @default(autoincrement())
+  userId           Int       @map("user_id")
+  schoolId         Int       @map("school_id")
+  layoutConfig     Json?     @map("layout_config")
+  visibleKpis      Json?     @map("visible_kpis")
+  chartPreferences Json?     @map("chart_preferences")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime? @updatedAt @map("updated_at")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id])
+  school School @relation(fields: [schoolId], references: [id])
+
+  @@unique([userId, schoolId], name: "user_school_preferences")
+  @@map("dashboard_preferences")
+}
+
+// Activity Logs
+model ActivityLog {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  schoolId     Int?      @map("school_id")
+  activity     String
+  description  String?
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
+  systemModule String?   @map("system_module")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user   User    @relation(fields: [userId], references: [id])
+  school School? @relation(fields: [schoolId], references: [id])
+
+  @@index([userId], name: "user_activity")
+  @@index([schoolId], name: "school_activity")
+  @@map("activity_logs")
+}

@@ -1,0 +1,768 @@
+import prisma from '../config/prisma';
+import { Prisma } from '@prisma/client';
+
+export interface GetStudentsParams {
+  gradeLevel?: string;
+  className?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+  schoolId: number;
+}
+
+export interface GetAcademicRecordsParams {
+  studentId?: number;
+  subjectId?: number;
+  semester?: string;
+  academicYear?: string;
+  gradeLevel?: string;
+  schoolId: number;
+}
+
+export interface GetStudentAttendanceParams {
+  studentId?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  status?: string;
+  schoolId: number;
+}
+
+export interface GetAcademicStatsParams {
+  academicYear?: string;
+  semester?: string;
+  gradeLevel?: string;
+  schoolId: number;
+}
+
+export interface CreateAcademicRecordData {
+  studentId: number;
+  subjectId: number;
+  teacherId: number;
+  semester: string;
+  academicYear: string;
+  knowledgeScore?: number;
+  skillScore?: number;
+  attitudeScore?: string;
+  midtermExamScore?: number;
+  finalExamScore?: number;
+  finalScore?: number;
+  teacherNotes?: string;
+}
+
+export class AcademicService {
+  
+  // Get students with pagination and filters
+  async getStudents(params: GetStudentsParams) {
+    try {
+      const { gradeLevel, className, search, page = 1, limit = 10, schoolId } = params;
+      const skip = (page - 1) * limit;
+
+      // Build where clause
+      const where: Prisma.StudentWhereInput = {
+        schoolId: schoolId,
+        isActive: true
+      };
+
+      if (gradeLevel) {
+        where.grade = gradeLevel;
+      }
+
+      if (search) {
+        where.OR = [
+          { fullName: { contains: search, mode: 'insensitive' } },
+          { studentId: { contains: search, mode: 'insensitive' } },
+          { nationalStudentId: { contains: search, mode: 'insensitive' } }
+        ];
+      }
+
+      // If className is provided, we need to filter by grade + class combination
+      // Assuming className format like "6A" where grade="6" and class="A"
+      if (className) {
+        where.grade = className.charAt(0); // Extract grade from className
+      }
+
+      const [students, total] = await Promise.all([
+        prisma.student.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: [
+            { grade: 'asc' },
+            { fullName: 'asc' }
+          ],
+          select: {
+            id: true,
+            studentId: true,
+            nationalStudentId: true,
+            fullName: true,
+            grade: true,
+            gender: true,
+            birthDate: true,
+            address: true,
+            parentName: true,
+            parentContact: true,
+            enrollmentDate: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        }),
+        prisma.student.count({ where })
+      ]);
+
+      // Transform data to match frontend interface
+      const transformedStudents = students.map(student => ({
+        id: student.id,
+        studentId: student.studentId,
+        fullName: student.fullName,
+        gradeLevel: student.grade,
+        className: student.grade + 'A', // Default class naming, adjust as needed
+        gender: student.gender,
+        dateOfBirth: student.birthDate?.toISOString().split('T')[0] || '',
+        enrollmentDate: student.enrollmentDate.toISOString().split('T')[0],
+        isActive: student.isActive
+      }));
+
+      return {
+        data: transformedStudents,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      };
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal mengambil data siswa');
+    }
+  }
+
+  // Get academic records with filters
+  async getAcademicRecords(params: GetAcademicRecordsParams) {
+    try {
+      const { studentId, subjectId, semester, academicYear, gradeLevel, schoolId } = params;
+
+      const where: Prisma.AcademicRecordWhereInput = {
+        student: {
+          schoolId: schoolId,
+          isActive: true
+        }
+      };
+
+      if (studentId) where.studentId = studentId;
+      if (subjectId) where.subjectId = subjectId;
+      if (semester) where.semester = semester;
+      if (academicYear) where.academicYear = academicYear;
+      if (gradeLevel) {
+        if (!where.student) {
+          where.student = {};
+        }
+        (where.student as Prisma.StudentWhereInput).grade = gradeLevel;
+      }
+
+      const records = await prisma.academicRecord.findMany({
+        where,
+        include: {
+          student: {
+            select: {
+              id: true,
+              studentId: true,
+              fullName: true,
+              grade: true,
+              gender: true,
+              birthDate: true,
+              enrollmentDate: true,
+              isActive: true
+            }
+          },
+          subject: {
+            select: {
+              id: true,
+              subjectCode: true,
+              subjectName: true,
+              gradeLevel: true,
+              weeklyHours: true,
+              description: true
+            }
+          },
+          teacher: {
+            select: {
+              id: true,
+              employeeId: true,
+              fullName: true,
+              email: true,
+              phoneNumber: true,
+              subjectArea: true
+            }
+          }
+        },
+        orderBy: [
+          { academicYear: 'desc' },
+          { semester: 'desc' },
+          { subject: { subjectName: 'asc' } }
+        ]
+      });
+
+      // Transform data to match frontend interface
+      const transformedRecords = records.map(record => ({
+        id: record.id,
+        studentId: record.studentId,
+        subjectId: record.subjectId,
+        teacherId: record.teacherId,
+        semester: record.semester,
+        academicYear: record.academicYear,
+        knowledgeScore: record.knowledgeScore ? Number(record.knowledgeScore) : undefined,
+        skillScore: record.skillScore ? Number(record.skillScore) : undefined,
+        attitudeScore: record.attitudeScore,
+        midtermExamScore: record.midtermExamScore ? Number(record.midtermExamScore) : undefined,
+        finalExamScore: record.finalExamScore ? Number(record.finalExamScore) : undefined,
+        finalScore: record.finalScore ? Number(record.finalScore) : undefined,
+        teacherNotes: record.teacherNotes,
+        student: {
+          ...record.student,
+          gradeLevel: record.student.grade,
+          className: record.student.grade + 'A',
+          gender: record.student.gender,
+          dateOfBirth: record.student.birthDate?.toISOString().split('T')[0] || '',
+          enrollmentDate: record.student.enrollmentDate.toISOString().split('T')[0]
+        },
+        subject: {
+          ...record.subject,
+          creditHours: record.subject.weeklyHours
+        },
+        teacher: {
+          ...record.teacher,
+          teacherId: record.teacher.employeeId || '',
+          subjects: [record.teacher.subjectArea]
+        }
+      }));
+
+      return transformedRecords;
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal mengambil data nilai akademik');
+    }
+  }
+
+  // Get subjects by grade level
+  async getSubjects(gradeLevel?: string) {
+    try {
+      const where: Prisma.SubjectWhereInput = {};
+      
+      if (gradeLevel) {
+        where.gradeLevel = gradeLevel;
+      }
+
+      const subjects = await prisma.subject.findMany({
+        where,
+        orderBy: { subjectName: 'asc' },
+        select: {
+          id: true,
+          subjectCode: true,
+          subjectName: true,
+          gradeLevel: true,
+          weeklyHours: true,
+          description: true
+        }
+      });
+
+      // Transform data to match frontend interface
+      const transformedSubjects = subjects.map(subject => ({
+        id: subject.id,
+        subjectCode: subject.subjectCode,
+        subjectName: subject.subjectName,
+        gradeLevel: subject.gradeLevel,
+        creditHours: subject.weeklyHours,
+        description: subject.description
+      }));
+
+      return transformedSubjects;
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal mengambil data mata pelajaran');
+    }
+  }
+
+  // Get teachers
+  async getTeachers(schoolId: number) {
+    try {
+      const teachers = await prisma.teacher.findMany({
+        where: {
+          schoolId: schoolId
+        },
+        orderBy: { fullName: 'asc' },
+        select: {
+          id: true,
+          employeeId: true,
+          fullName: true,
+          email: true,
+          phoneNumber: true,
+          subjectArea: true,
+          position: true
+        }
+      });
+
+      // Transform data to match frontend interface
+      const transformedTeachers = teachers.map(teacher => ({
+        id: teacher.id,
+        teacherId: teacher.employeeId || '',
+        fullName: teacher.fullName,
+        email: teacher.email || '',
+        phoneNumber: teacher.phoneNumber,
+        subjects: [teacher.subjectArea] // Convert single subject to array
+      }));
+
+      return transformedTeachers;
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal mengambil data guru');
+    }
+  }
+
+  // Get basic competencies by subject
+  async getBasicCompetencies(subjectId?: number) {
+    try {
+      const where: Prisma.BasicCompetencyWhereInput = {};
+      
+      if (subjectId) {
+        where.subjectId = subjectId;
+      }
+
+      const competencies = await prisma.basicCompetency.findMany({
+        where,
+        include: {
+          subject: {
+            select: {
+              id: true,
+              subjectCode: true,
+              subjectName: true,
+              gradeLevel: true,
+              weeklyHours: true,
+              description: true
+            }
+          }
+        },
+        orderBy: { competencyCode: 'asc' }
+      });
+
+      // Transform data to match frontend interface
+      const transformedCompetencies = competencies.map(competency => ({
+        id: competency.id,
+        subjectId: competency.subjectId,
+        competencyCode: competency.competencyCode,
+        competencyDescription: competency.competencyDescription,
+        difficultyLevel: competency.difficultyLevel,
+        subject: {
+          ...competency.subject,
+          creditHours: competency.subject.weeklyHours
+        }
+      }));
+
+      return transformedCompetencies;
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal mengambil data kompetensi dasar');
+    }
+  }
+
+  // Get student attendance
+  async getStudentAttendance(params: GetStudentAttendanceParams) {
+    try {
+      const { studentId, dateFrom, dateTo, status, schoolId } = params;
+
+      const where: Prisma.StudentAttendanceWhereInput = {
+        student: {
+          schoolId: schoolId,
+          isActive: true
+        }
+      };
+
+      if (studentId) where.studentId = studentId;
+      if (status) where.status = status as any;
+      
+      if (dateFrom || dateTo) {
+        where.date = {};
+        if (dateFrom) where.date.gte = new Date(dateFrom);
+        if (dateTo) where.date.lte = new Date(dateTo);
+      }
+
+      const attendance = await prisma.studentAttendance.findMany({
+        where,
+        include: {
+          student: {
+            select: {
+              id: true,
+              studentId: true,
+              fullName: true,
+              grade: true,
+              gender: true,
+              birthDate: true,
+              enrollmentDate: true,
+              isActive: true
+            }
+          }
+        },
+        orderBy: [
+          { date: 'desc' },
+          { student: { fullName: 'asc' } }
+        ]
+      });
+
+      // Transform data to match frontend interface
+      const transformedAttendance = attendance.map(record => ({
+        id: record.id,
+        studentId: record.studentId,
+        attendanceDate: record.date.toISOString().split('T')[0],
+        status: record.status,
+        notes: record.notes,
+        student: {
+          ...record.student,
+          gradeLevel: record.student.grade,
+          className: record.student.grade + 'A',
+          gender: record.student.gender,
+          dateOfBirth: record.student.birthDate?.toISOString().split('T')[0] || '',
+          enrollmentDate: record.student.enrollmentDate.toISOString().split('T')[0]
+        }
+      }));
+
+      return transformedAttendance;
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal mengambil data kehadiran siswa');
+    }
+  }
+
+  // Get academic statistics
+  async getAcademicStats(params: GetAcademicStatsParams) {
+    try {
+      const { academicYear, semester, gradeLevel, schoolId } = params;
+
+      // Build where clause for academic records
+      const academicWhere: Prisma.AcademicRecordWhereInput = {
+        student: {
+          schoolId: schoolId,
+          isActive: true
+        }
+      };
+
+      if (academicYear) academicWhere.academicYear = academicYear;
+      if (semester) academicWhere.semester = semester;
+      if (gradeLevel) {
+        academicWhere.student = {
+          ...academicWhere.student,
+          ...(gradeLevel ? { grade: gradeLevel as any } : {})
+        };
+      }
+
+      // Get total students
+      const totalStudents = await prisma.student.count({
+        where: {
+          schoolId: schoolId,
+          isActive: true,
+          ...(gradeLevel && { grade: gradeLevel })
+        }
+      });
+
+      // Get academic records for calculations
+      const academicRecords = await prisma.academicRecord.findMany({
+        where: academicWhere,
+        include: {
+          subject: {
+            select: {
+              subjectName: true
+            }
+          }
+        }
+      });
+
+      // Calculate average score
+      const validScores = academicRecords
+        .filter(record => record.finalScore !== null)
+        .map(record => Number(record.finalScore));
+      
+      const averageScore = validScores.length > 0 
+        ? validScores.reduce((sum, score) => sum + score, 0) / validScores.length 
+        : 0;
+
+      // Calculate pass rate (assuming passing score is 75)
+      const passingGrade = 75;
+      const passedStudents = validScores.filter(score => score >= passingGrade).length;
+      const passRate = validScores.length > 0 ? (passedStudents / validScores.length) * 100 : 0;
+
+      // Get attendance rate
+      const attendanceWhere: Prisma.StudentAttendanceWhereInput = {
+        student: {
+          schoolId: schoolId,
+          isActive: true,
+          ...(gradeLevel && { grade: gradeLevel })
+        }
+      };
+
+      // For current month if no specific date range
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      attendanceWhere.date = {
+        gte: firstDayOfMonth,
+        lte: now
+      };
+
+      const [totalAttendance, presentAttendance] = await Promise.all([
+        prisma.studentAttendance.count({ where: attendanceWhere }),
+        prisma.studentAttendance.count({ 
+          where: { ...attendanceWhere, status: 'present' } 
+        })
+      ]);
+
+      const attendanceRate = totalAttendance > 0 ? (presentAttendance / totalAttendance) * 100 : 0;
+
+      // Calculate subject performance
+      const subjectStats = new Map<string, { scores: number[], total: number }>();
+      
+      academicRecords.forEach(record => {
+        if (record.finalScore !== null) {
+          const subjectName = record.subject.subjectName;
+          if (!subjectStats.has(subjectName)) {
+            subjectStats.set(subjectName, { scores: [], total: 0 });
+          }
+          const stats = subjectStats.get(subjectName)!;
+          stats.scores.push(Number(record.finalScore));
+          stats.total++;
+        }
+      });
+
+      const subjectPerformance = Array.from(subjectStats.entries()).map(([subject, stats]) => {
+        const averageScore = stats.scores.reduce((sum, score) => sum + score, 0) / stats.scores.length;
+        const passed = stats.scores.filter(score => score >= passingGrade).length;
+        const passRate = (passed / stats.scores.length) * 100;
+
+        return {
+          subject,
+          averageScore: Math.round(averageScore * 10) / 10,
+          passRate: Math.round(passRate * 10) / 10
+        };
+      });
+
+      return {
+        totalStudents,
+        averageScore: Math.round(averageScore * 10) / 10,
+        passRate: Math.round(passRate * 10) / 10,
+        attendanceRate: Math.round(attendanceRate * 10) / 10,
+        subjectPerformance: subjectPerformance.sort((a, b) => a.subject.localeCompare(b.subject))
+      };
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal mengambil statistik akademik');
+    }
+  }
+
+  // Create academic record
+  async createAcademicRecord(data: CreateAcademicRecordData, schoolId: number) {
+    try {
+      // Verify that student, subject, and teacher belong to the school
+      const [student, subject, teacher] = await Promise.all([
+        prisma.student.findFirst({
+          where: { id: data.studentId, schoolId: schoolId, isActive: true }
+        }),
+        prisma.subject.findUnique({
+          where: { id: data.subjectId }
+        }),
+        prisma.teacher.findFirst({
+          where: { id: data.teacherId, schoolId: schoolId }
+        })
+      ]);
+
+      if (!student) {
+        throw new Error('Siswa tidak ditemukan atau bukan bagian dari sekolah ini');
+      }
+      if (!subject) {
+        throw new Error('Mata pelajaran tidak ditemukan');
+      }
+      if (!teacher) {
+        throw new Error('Guru tidak ditemukan atau bukan bagian dari sekolah ini');
+      }
+
+      // Check if record already exists
+      const existingRecord = await prisma.academicRecord.findUnique({
+        where: {
+          student_subject_period: {
+            studentId: data.studentId,
+            subjectId: data.subjectId,
+            semester: data.semester,
+            academicYear: data.academicYear
+          }
+        }
+      });
+
+      if (existingRecord) {
+        throw new Error('Nilai untuk siswa, mata pelajaran, semester, dan tahun akademik ini sudah ada');
+      }
+
+      const record = await prisma.academicRecord.create({
+        data: {
+          studentId: data.studentId,
+          subjectId: data.subjectId,
+          teacherId: data.teacherId,
+          semester: data.semester,
+          academicYear: data.academicYear,
+          knowledgeScore: data.knowledgeScore,
+          skillScore: data.skillScore,
+          attitudeScore: data.attitudeScore,
+          midtermExamScore: data.midtermExamScore,
+          finalExamScore: data.finalExamScore,
+          finalScore: data.finalScore,
+          teacherNotes: data.teacherNotes
+        },
+        include: {
+          student: {
+            select: {
+              id: true,
+              studentId: true,
+              fullName: true,
+              grade: true
+            }
+          },
+          subject: {
+            select: {
+              id: true,
+              subjectCode: true,
+              subjectName: true
+            }
+          },
+          teacher: {
+            select: {
+              id: true,
+              fullName: true
+            }
+          }
+        }
+      });
+
+      return {
+        id: record.id,
+        studentId: record.studentId,
+        subjectId: record.subjectId,
+        teacherId: record.teacherId,
+        semester: record.semester,
+        academicYear: record.academicYear,
+        knowledgeScore: record.knowledgeScore ? Number(record.knowledgeScore) : undefined,
+        skillScore: record.skillScore ? Number(record.skillScore) : undefined,
+        attitudeScore: record.attitudeScore,
+        midtermExamScore: record.midtermExamScore ? Number(record.midtermExamScore) : undefined,
+        finalExamScore: record.finalExamScore ? Number(record.finalExamScore) : undefined,
+        finalScore: record.finalScore ? Number(record.finalScore) : undefined,
+        teacherNotes: record.teacherNotes,
+        student: {
+          ...record.student,
+          gradeLevel: record.student.grade,
+          className: record.student.grade + 'A'
+        },
+        subject: record.subject,
+        teacher: record.teacher
+      };
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal membuat data nilai akademik');
+    }
+  }
+
+  // Update academic record
+  async updateAcademicRecord(id: number, data: Partial<CreateAcademicRecordData>, schoolId: number) {
+    try {
+      // Verify record exists and belongs to the school
+      const existingRecord = await prisma.academicRecord.findFirst({
+        where: {
+          id: id,
+          student: {
+            schoolId: schoolId,
+            isActive: true
+          }
+        }
+      });
+
+      if (!existingRecord) {
+        throw new Error('Data nilai tidak ditemukan atau bukan bagian dari sekolah ini');
+      }
+
+      const record = await prisma.academicRecord.update({
+        where: { id: id },
+        data: {
+          knowledgeScore: data.knowledgeScore,
+          skillScore: data.skillScore,
+          attitudeScore: data.attitudeScore,
+          midtermExamScore: data.midtermExamScore,
+          finalExamScore: data.finalExamScore,
+          finalScore: data.finalScore,
+          teacherNotes: data.teacherNotes,
+          updatedAt: new Date()
+        },
+        include: {
+          student: {
+            select: {
+              id: true,
+              studentId: true,
+              fullName: true,
+              grade: true
+            }
+          },
+          subject: {
+            select: {
+              id: true,
+              subjectCode: true,
+              subjectName: true
+            }
+          },
+          teacher: {
+            select: {
+              id: true,
+              fullName: true
+            }
+          }
+        }
+      });
+
+      return {
+        id: record.id,
+        studentId: record.studentId,
+        subjectId: record.subjectId,
+        teacherId: record.teacherId,
+        semester: record.semester,
+        academicYear: record.academicYear,
+        knowledgeScore: record.knowledgeScore ? Number(record.knowledgeScore) : undefined,
+        skillScore: record.skillScore ? Number(record.skillScore) : undefined,
+        attitudeScore: record.attitudeScore,
+        midtermExamScore: record.midtermExamScore ? Number(record.midtermExamScore) : undefined,
+        finalExamScore: record.finalExamScore ? Number(record.finalExamScore) : undefined,
+        finalScore: record.finalScore ? Number(record.finalScore) : undefined,
+        teacherNotes: record.teacherNotes,
+        student: {
+          ...record.student,
+          gradeLevel: record.student.grade,
+          className: record.student.grade + 'A'
+        },
+        subject: record.subject,
+        teacher: record.teacher
+      };
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal memperbarui data nilai akademik');
+    }
+  }
+
+  // Delete academic record
+  async deleteAcademicRecord(id: number, schoolId: number) {
+    try {
+      // Verify record exists and belongs to the school
+      const existingRecord = await prisma.academicRecord.findFirst({
+        where: {
+          id: id,
+          student: {
+            schoolId: schoolId,
+            isActive: true
+          }
+        }
+      });
+
+      if (!existingRecord) {
+        throw new Error('Data nilai tidak ditemukan atau bukan bagian dari sekolah ini');
+      }
+
+      await prisma.academicRecord.delete({
+        where: { id: id }
+      });
+
+      return { message: 'Data nilai berhasil dihapus' };
+    } catch (error: any) {
+      throw new Error(error.message || 'Gagal menghapus data nilai akademik');
+    }
+  }
+}
