@@ -13,6 +13,7 @@ import prisma from './config/prisma';
 // Import routes
 import authRoutes from './routes/authRoutes';
 import academicRoutes from './routes/academicRoutes';
+import teacherEvaluationRoutes from './routes/teacherEvaluationRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -86,6 +87,7 @@ app.get('/health', async (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/academic', academicRoutes);
+app.use('/api/teacher-evaluation', teacherEvaluationRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

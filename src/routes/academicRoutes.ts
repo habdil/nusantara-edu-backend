@@ -50,4 +50,11 @@ router.get('/student-attendance', academicController.getStudentAttendance);
 // Academic statistics endpoints
 router.get('/stats', academicController.getAcademicStats);
 
+// Attendance summary endpoint
+router.get('/attendance-summary', academicController.getAttendanceSummary);
+
+// Grade analysis endpoints
+router.get('/grade-distribution', academicController.getGradeDistribution);
+router.get('/subject-averages', academicController.getSubjectAverages);
+
 export default router;

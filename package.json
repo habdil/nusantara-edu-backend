@@ -13,6 +13,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed-auth": "tsx prisma/seed-auth.ts",
     "prisma:seed-academic": "tsx prisma/seed-academic.ts",
+    "prisma:seed-teacher-evaluation": "tsx prisma/seed-teacher-evaluation.ts",
     "prisma:reset": "prisma migrate reset && npm run prisma:seed",
     "clean": "rm -rf node_modules package-lock.json && npm install"
   },

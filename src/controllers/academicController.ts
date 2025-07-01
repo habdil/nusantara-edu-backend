@@ -64,6 +64,121 @@ export class AcademicController {
     }
   };
 
+  // Get attendance summary
+getAttendanceSummary = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user?.schoolId) {
+      res.status(400).json({
+        success: false,
+        message: 'Informasi sekolah tidak ditemukan',
+        error: 'SCHOOL_INFO_MISSING'
+      });
+      return;
+    }
+
+    // Validate query parameters
+    const academicYear = req.query.academicYear as string;
+    const semester = req.query.semester as string;
+
+    const result = await this.academicService.getAttendanceSummary({
+      academicYear,
+      semester,
+      schoolId: req.user.schoolId
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Ringkasan kehadiran berhasil diambil',
+      data: result
+    });
+  } catch (error: any) {
+    console.error('Get attendance summary error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Gagal mengambil ringkasan kehadiran',
+      error: 'GET_ATTENDANCE_SUMMARY_FAILED'
+    });
+  }
+};
+
+// Get grade distribution
+getGradeDistribution = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user?.schoolId) {
+      res.status(400).json({
+        success: false,
+        message: 'Informasi sekolah tidak ditemukan',
+        error: 'SCHOOL_INFO_MISSING'
+      });
+      return;
+    }
+
+    // Validate query parameters
+    const academicYear = req.query.academicYear as string;
+    const semester = req.query.semester as string;
+    const gradeLevel = req.query.gradeLevel as string;
+
+    const result = await this.academicService.getGradeDistribution({
+      academicYear,
+      semester,
+      gradeLevel,
+      schoolId: req.user.schoolId
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Distribusi nilai berhasil diambil',
+      data: result
+    });
+  } catch (error: any) {
+    console.error('Get grade distribution error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Gagal mengambil distribusi nilai',
+      error: 'GET_GRADE_DISTRIBUTION_FAILED'
+    });
+  }
+};
+
+// Get subject averages
+getSubjectAverages = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user?.schoolId) {
+      res.status(400).json({
+        success: false,
+        message: 'Informasi sekolah tidak ditemukan',
+        error: 'SCHOOL_INFO_MISSING'
+      });
+      return;
+    }
+
+    // Validate query parameters
+    const academicYear = req.query.academicYear as string;
+    const semester = req.query.semester as string;
+    const gradeLevel = req.query.gradeLevel as string;
+
+    const result = await this.academicService.getSubjectAverages({
+      academicYear,
+      semester,
+      gradeLevel,
+      schoolId: req.user.schoolId
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Rata-rata nilai per mata pelajaran berhasil diambil',
+      data: result
+    });
+  } catch (error: any) {
+    console.error('Get subject averages error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Gagal mengambil rata-rata nilai per mata pelajaran',
+      error: 'GET_SUBJECT_AVERAGES_FAILED'
+    });
+  }
+};
+
   // Get academic records with filters
   getAcademicRecords = async (req: Request, res: Response): Promise<void> => {
     try {

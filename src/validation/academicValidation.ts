@@ -81,6 +81,64 @@ export const getAcademicRecordsValidation = Joi.object({
     })
 });
 
+// Validation for attendance summary
+export const getAttendanceSummaryValidation = Joi.object({
+  academicYear: Joi.string()
+    .pattern(/^\d{4}\/\d{4}$/)
+    .optional()
+    .messages({
+      'string.pattern.base': 'Format tahun akademik tidak valid (contoh: 2024/2025)'
+    }),
+  semester: Joi.string()
+    .valid('1', '2')
+    .optional()
+    .messages({
+      'any.only': 'Semester harus 1 atau 2'
+    })
+});
+
+// Validation for grade distribution
+export const getGradeDistributionValidation = Joi.object({
+  academicYear: Joi.string()
+    .pattern(/^\d{4}\/\d{4}$/)
+    .optional()
+    .messages({
+      'string.pattern.base': 'Format tahun akademik tidak valid (contoh: 2024/2025)'
+    }),
+  semester: Joi.string()
+    .valid('1', '2')
+    .optional()
+    .messages({
+      'any.only': 'Semester harus 1 atau 2'
+    }),
+  gradeLevel: Joi.string()
+    .optional()
+    .messages({
+      'string.base': 'Grade level harus berupa string'
+    })
+});
+
+// Validation for subject averages
+export const getSubjectAveragesValidation = Joi.object({
+  academicYear: Joi.string()
+    .pattern(/^\d{4}\/\d{4}$/)
+    .optional()
+    .messages({
+      'string.pattern.base': 'Format tahun akademik tidak valid (contoh: 2024/2025)'
+    }),
+  semester: Joi.string()
+    .valid('1', '2')
+    .optional()
+    .messages({
+      'any.only': 'Semester harus 1 atau 2'
+    }),
+  gradeLevel: Joi.string()
+    .optional()
+    .messages({
+      'string.base': 'Grade level harus berupa string'
+    })
+});
+
 // Validation for getting subjects
 export const getSubjectsValidation = Joi.object({
   gradeLevel: Joi.string()

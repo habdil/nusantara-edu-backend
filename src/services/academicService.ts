@@ -1,6 +1,26 @@
 import prisma from '../config/prisma';
 import { Prisma } from '@prisma/client';
 
+export interface GetAttendanceSummaryParams {
+  academicYear?: string;
+  semester?: string;
+  schoolId: number;
+}
+
+export interface GetGradeDistributionParams {
+  academicYear?: string;
+  semester?: string;
+  gradeLevel?: string;
+  schoolId: number;
+}
+
+export interface GetSubjectAveragesParams {
+  academicYear?: string;
+  semester?: string;
+  gradeLevel?: string;
+  schoolId: number;
+}
+
 export interface GetStudentsParams {
   gradeLevel?: string;
   className?: string;
@@ -134,6 +154,294 @@ export class AcademicService {
       throw new Error(error.message || 'Gagal mengambil data siswa');
     }
   }
+
+  // Get attendance summary with class breakdown
+async getAttendanceSummary(params: GetAttendanceSummaryParams) {
+  try {
+    const { academicYear, semester, schoolId } = params;
+
+    // First, get all distinct grades/classes from students table
+    const allGrades = await prisma.student.findMany({
+      where: {
+        schoolId: schoolId,
+        isActive: true
+      },
+      select: {
+        grade: true
+      },
+      distinct: ['grade']
+    });
+
+    // Build where clause for attendance
+    const attendanceWhere: Prisma.StudentAttendanceWhereInput = {
+      student: {
+        schoolId: schoolId,
+        isActive: true
+      }
+    };
+
+    // Add date filtering if needed
+    if (academicYear || semester) {
+      // For simplicity, filter by current academic year
+      const currentYear = new Date().getFullYear();
+      const startDate = new Date(currentYear, 6, 1); // July 1st
+      const endDate = new Date(currentYear + 1, 5, 30); // June 30th next year
+      
+      attendanceWhere.date = {
+        gte: startDate,
+        lte: endDate
+      };
+    }
+
+    // Get all attendance records
+    const attendanceRecords = await prisma.studentAttendance.findMany({
+      where: attendanceWhere,
+      include: {
+        student: {
+          select: {
+            id: true,
+            studentId: true,
+            fullName: true,
+            grade: true
+          }
+        }
+      }
+    });
+
+    // Calculate overall statistics
+    const totalRecords = attendanceRecords.length;
+    const presentCount = attendanceRecords.filter(r => r.status === 'present').length;
+    const excusedCount = attendanceRecords.filter(r => r.status === 'excused').length;
+    const sickCount = attendanceRecords.filter(r => r.status === 'sick').length;
+    const unexcusedCount = attendanceRecords.filter(r => r.status === 'unexcused').length;
+
+    const overallStats = {
+      totalDays: totalRecords,
+      presentDays: presentCount,
+      excusedDays: excusedCount,
+      sickDays: sickCount,
+      unexcusedDays: unexcusedCount,
+      attendanceRate: totalRecords > 0 ? Number(((presentCount / totalRecords) * 100).toFixed(1)) : 0
+    };
+
+    // Group attendance records by class
+    const attendanceByClass = new Map<string, typeof attendanceRecords>();
+    attendanceRecords.forEach(record => {
+      const className = record.student.grade;
+      if (!attendanceByClass.has(className)) {
+        attendanceByClass.set(className, []);
+      }
+      attendanceByClass.get(className)!.push(record);
+    });
+
+    // Create class attendance array including all grades, even those without attendance data
+    const classAttendance = allGrades.map(gradeObj => {
+      const grade = gradeObj.grade;
+      const records = attendanceByClass.get(grade) || [];
+      
+      const totalClassRecords = records.length;
+      const presentClassRecords = records.filter(r => r.status === 'present').length;
+      const rate = totalClassRecords > 0 ? Number(((presentClassRecords / totalClassRecords) * 100).toFixed(1)) : 0;
+      
+      let status = 'poor';
+      if (totalClassRecords === 0) {
+        status = 'poor'; // No data available
+      } else if (rate >= 95) {
+        status = 'excellent';
+      } else if (rate >= 90) {
+        status = 'good';
+      } else if (rate >= 80) {
+        status = 'fair';
+      }
+
+      return {
+        className: grade,
+        rate,
+        status
+      };
+    }).sort((a, b) => {
+      // Sort by grade number (1, 2, 3, 4, 5, 6)
+      const gradeA = parseInt(a.className) || 0;
+      const gradeB = parseInt(b.className) || 0;
+      return gradeA - gradeB;
+    });
+
+    return {
+      overallStats,
+      classAttendance
+    };
+  } catch (error: any) {
+    throw new Error(error.message || 'Gagal mengambil ringkasan kehadiran');
+  }
+}
+
+async getGradeDistribution(params: GetGradeDistributionParams) {
+  try {
+    const { academicYear, semester, gradeLevel, schoolId } = params;
+
+    const academicWhere: Prisma.AcademicRecordWhereInput = {
+      student: {
+        schoolId: schoolId,
+        isActive: true
+      }
+    };
+
+    if (academicYear) academicWhere.academicYear = academicYear;
+    if (semester) academicWhere.semester = semester;
+    if (gradeLevel) {
+      academicWhere.student = {
+        ...academicWhere.student,
+        grade: gradeLevel as any
+      };
+    }
+
+    const academicRecords = await prisma.academicRecord.findMany({
+      where: academicWhere,
+      select: {
+        finalScore: true
+      }
+    });
+
+    // Filter valid scores and categorize
+    const validScores = academicRecords
+      .filter(record => record.finalScore !== null)
+      .map(record => Number(record.finalScore));
+
+    const total = validScores.length;
+    
+    const gradeCategories = [
+      { grade: "A (90-100)", min: 90, max: 100, count: 0, color: "bg-green-500" },
+      { grade: "B (80-89)", min: 80, max: 89, count: 0, color: "bg-blue-500" },
+      { grade: "C (70-79)", min: 70, max: 79, count: 0, color: "bg-yellow-500" },
+      { grade: "D (60-69)", min: 60, max: 69, count: 0, color: "bg-orange-500" },
+      { grade: "E (<60)", min: 0, max: 59, count: 0, color: "bg-red-500" }
+    ];
+
+    // Count scores in each category
+    validScores.forEach(score => {
+      gradeCategories.forEach(category => {
+        if (score >= category.min && score <= category.max) {
+          category.count++;
+        }
+      });
+    });
+
+    // Calculate percentages
+    const gradeDistribution = gradeCategories.map(category => ({
+      grade: category.grade,
+      count: category.count,
+      percentage: total > 0 ? Number(((category.count / total) * 100).toFixed(1)) : 0,
+      color: category.color
+    }));
+
+    return gradeDistribution;
+  } catch (error: any) {
+    throw new Error(error.message || 'Gagal mengambil distribusi nilai');
+  }
+}
+
+// Get subject averages with trends
+async getSubjectAverages(params: GetSubjectAveragesParams) {
+  try {
+    const { academicYear, semester, gradeLevel, schoolId } = params;
+
+    const academicWhere: Prisma.AcademicRecordWhereInput = {
+      student: {
+        schoolId: schoolId,
+        isActive: true
+      }
+    };
+
+    if (academicYear) academicWhere.academicYear = academicYear;
+    if (semester) academicWhere.semester = semester;
+    if (gradeLevel) {
+      academicWhere.student = {
+        ...academicWhere.student,
+        grade: gradeLevel as any
+      };
+    }
+
+    const academicRecords = await prisma.academicRecord.findMany({
+      where: academicWhere,
+      include: {
+        subject: {
+          select: {
+            id: true,
+            subjectName: true
+          }
+        }
+      }
+    });
+
+    // Group by subject and calculate averages
+    const subjectGroups = new Map<string, number[]>();
+    
+    academicRecords.forEach(record => {
+      if (record.finalScore !== null) {
+        const subjectName = record.subject.subjectName;
+        if (!subjectGroups.has(subjectName)) {
+          subjectGroups.set(subjectName, []);
+        }
+        subjectGroups.get(subjectName)!.push(Number(record.finalScore));
+      }
+    });
+
+    // For trend calculation, get previous period data (simplified)
+    // In real implementation, you might want to compare with previous semester/year
+    const previousWhere: Prisma.AcademicRecordWhereInput = {
+      ...academicWhere,
+      // Adjust for previous period comparison
+      semester: semester === '2' ? '1' : '2' // Simple previous semester logic
+    };
+
+    const previousRecords = await prisma.academicRecord.findMany({
+      where: previousWhere,
+      include: {
+        subject: {
+          select: {
+            subjectName: true
+          }
+        }
+      }
+    });
+
+    const previousSubjectGroups = new Map<string, number[]>();
+    previousRecords.forEach(record => {
+      if (record.finalScore !== null) {
+        const subjectName = record.subject.subjectName;
+        if (!previousSubjectGroups.has(subjectName)) {
+          previousSubjectGroups.set(subjectName, []);
+        }
+        previousSubjectGroups.get(subjectName)!.push(Number(record.finalScore));
+      }
+    });
+
+    const subjectAverages = Array.from(subjectGroups.entries()).map(([subject, scores]) => {
+      const currentAverage = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+      
+      // Calculate trend
+      let trend = 'stable';
+      const previousScores = previousSubjectGroups.get(subject);
+      if (previousScores && previousScores.length > 0) {
+        const previousAverage = previousScores.reduce((sum, score) => sum + score, 0) / previousScores.length;
+        const difference = currentAverage - previousAverage;
+        
+        if (difference > 2) trend = 'up';
+        else if (difference < -2) trend = 'down';
+      }
+
+      return {
+        subject,
+        average: Number(currentAverage.toFixed(1)),
+        trend
+      };
+    }).sort((a, b) => a.subject.localeCompare(b.subject));
+
+    return subjectAverages;
+  } catch (error: any) {
+    throw new Error(error.message || 'Gagal mengambil rata-rata nilai per mata pelajaran');
+  }
+}
 
   // Get academic records with filters
   async getAcademicRecords(params: GetAcademicRecordsParams) {
