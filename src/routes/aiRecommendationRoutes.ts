@@ -33,6 +33,19 @@ const updateRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiting for generate operation (very restrictive)
+const generateRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 3, // Maximum 3 generate per 10 minutes per IP
+  message: {
+    success: false,
+    message: 'Terlalu banyak operasi generate rekomendasi. Silakan tunggu 10 menit.',
+    error: 'GENERATE_RATE_LIMIT_EXCEEDED'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Apply authentication and rate limiting to all routes
 router.use(authenticateToken);
 router.use(requirePrincipalOrAdmin);
@@ -43,6 +56,9 @@ router.get('/', aiRecommendationController.getRecommendations);
 router.get('/stats', aiRecommendationController.getStats);
 router.get('/trending', aiRecommendationController.getTrendingCategories);
 router.get('/:id', aiRecommendationController.getRecommendation);
+
+// POST endpoints - Create operations (with stricter rate limiting)
+router.post('/generate', generateRateLimit, aiRecommendationController.generateRecommendations); // ✅ Added generate endpoint
 
 // PUT endpoints - Update operations (with stricter rate limiting)
 router.put('/:id', updateRateLimit, aiRecommendationController.updateRecommendation);

@@ -108,138 +108,163 @@ export class AIRecommendationService {
   }
 
   // Get recommendations with filters and pagination
-  async getRecommendations(params: GetRecommendationsParams): Promise<{
-    success: boolean;
-    data: any[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    stats?: RecommendationStats;
-  }> {
-    try {
-      const {
-        schoolId,
-        category,
-        implementationStatus,
-        urgencyLevel,
-        dateFrom,
-        dateTo,
-        page = 1,
-        limit = 10,
-        confidenceThreshold
-      } = params;
+// Tambahkan di aiRecommendationService.ts - method getRecommendations
+async getRecommendations(params: GetRecommendationsParams): Promise<{
+  success: boolean;
+  data: any[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  stats?: RecommendationStats;
+}> {
+  try {
+    console.log('🔍 Service getRecommendations called with params:', params);
+    
+    const {
+      schoolId,
+      category,
+      implementationStatus,
+      urgencyLevel,
+      dateFrom,
+      dateTo,
+      page = 1,
+      limit = 10,
+      confidenceThreshold
+    } = params;
 
-      // Build where clause
-      const where: Prisma.AiRecommendationWhereInput = {
-        schoolId: schoolId
-      };
+    console.log('🏫 Querying for schoolId:', schoolId);
 
-      if (category) where.category = category;
-      if (implementationStatus) where.implementationStatus = implementationStatus;
-      if (confidenceThreshold) {
-        where.confidenceLevel = { gte: confidenceThreshold };
-      }
+    // Build where clause
+    const where: Prisma.AiRecommendationWhereInput = {
+      schoolId: schoolId
+    };
 
-      if (dateFrom || dateTo) {
-        where.generatedDate = {};
-        if (dateFrom) where.generatedDate.gte = dateFrom;
-        if (dateTo) where.generatedDate.lte = dateTo;
-      }
-
-      // Calculate pagination
-      const skip = (page - 1) * limit;
-
-      // Get recommendations with pagination
-      const [recommendations, total] = await Promise.all([
-        prisma.aiRecommendation.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: [
-            { generatedDate: 'desc' },
-            { confidenceLevel: 'desc' }
-          ]
-        }),
-        prisma.aiRecommendation.count({ where })
-      ]);
-
-      // Transform data to match frontend format
-      const transformedRecommendations = recommendations.map(rec => {
-        // Determine urgency level from supporting data or implementation status
-        let urgency = 'medium';
-        if (rec.supportingData && typeof rec.supportingData === 'object') {
-          const data = rec.supportingData as any;
-          if (data.currentAverage && data.currentAverage < 60) urgency = 'critical';
-          else if (data.currentAverage && data.currentAverage < 70) urgency = 'high';
-          else if (data.attendanceRate && data.attendanceRate < 70) urgency = 'critical';
-          else if (data.attendanceRate && data.attendanceRate < 80) urgency = 'high';
-        }
-
-        // Determine icon and color based on category
-        let icon = 'Target';
-        let color = 'blue';
-        
-        switch (rec.category) {
-          case 'financial':
-            icon = 'TrendingUp';
-            color = 'green';
-            break;
-          case 'teacher':
-            icon = 'Lightbulb';
-            color = 'purple';
-            break;
-          case 'asset':
-            icon = 'Brain';
-            color = 'orange';
-            break;
-          default:
-            icon = 'Target';
-            color = 'blue';
-        }
-
-        return {
-          id: rec.id,
-          category: rec.category,
-          title: rec.title,
-          description: rec.description,
-          supportingData: rec.supportingData,
-          confidenceLevel: Number(rec.confidenceLevel),
-          generatedDate: rec.generatedDate.toISOString().split('T')[0],
-          predictedImpact: rec.predictedImpact,
-          implementationStatus: rec.implementationStatus || 'pending',
-          principalFeedback: rec.principalFeedback,
-          icon,
-          color,
-          urgencyLevel: urgency
-        };
-      });
-
-      // Calculate stats if needed
-      const stats = await this.getRecommendationStats(schoolId);
-
-      return {
-        success: true,
-        data: transformedRecommendations,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-        stats
-      };
-
-    } catch (error: any) {
-      console.error('Get recommendations error:', error);
-      return {
-        success: false,
-        data: [],
-        total: 0,
-        page: 1,
-        limit: 10,
-        totalPages: 0
-      };
+    if (category) where.category = category;
+    if (implementationStatus) where.implementationStatus = implementationStatus;
+    if (confidenceThreshold) {
+      where.confidenceLevel = { gte: confidenceThreshold };
     }
+
+    if (dateFrom || dateTo) {
+      where.generatedDate = {};
+      if (dateFrom) where.generatedDate.gte = dateFrom;
+      if (dateTo) where.generatedDate.lte = dateTo;
+    }
+
+    console.log('📋 Prisma where clause:', JSON.stringify(where, null, 2));
+
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+
+    console.log('📄 Pagination: skip =', skip, ', take =', limit);
+
+    // Get recommendations with pagination
+    const [recommendations, total] = await Promise.all([
+      prisma.aiRecommendation.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [
+          { generatedDate: 'desc' },
+          { confidenceLevel: 'desc' }
+        ]
+      }),
+      prisma.aiRecommendation.count({ where })
+    ]);
+
+    console.log('📊 Database results:', {
+      recommendationsFound: recommendations.length,
+      totalCount: total,
+      sampleData: recommendations.slice(0, 2).map(r => ({
+        id: r.id,
+        title: r.title,
+        category: r.category,
+        schoolId: r.schoolId,
+        generatedDate: r.generatedDate
+      }))
+    });
+
+    // Transform data to match frontend format
+    const transformedRecommendations = recommendations.map(rec => {
+      // Determine urgency level from supporting data or implementation status
+      let urgency = 'medium';
+      if (rec.supportingData && typeof rec.supportingData === 'object') {
+        const data = rec.supportingData as any;
+        if (data.currentAverage && data.currentAverage < 60) urgency = 'critical';
+        else if (data.currentAverage && data.currentAverage < 70) urgency = 'high';
+        else if (data.attendanceRate && data.attendanceRate < 70) urgency = 'critical';
+        else if (data.attendanceRate && data.attendanceRate < 80) urgency = 'high';
+      }
+
+      // Determine icon and color based on category
+      let icon = 'Target';
+      let color = 'blue';
+      
+      switch (rec.category) {
+        case 'financial':
+          icon = 'TrendingUp';
+          color = 'green';
+          break;
+        case 'teacher':
+          icon = 'Lightbulb';
+          color = 'purple';
+          break;
+        case 'asset':
+          icon = 'Brain';
+          color = 'orange';
+          break;
+        default:
+          icon = 'Target';
+          color = 'blue';
+      }
+
+      return {
+        id: rec.id,
+        category: rec.category,
+        title: rec.title,
+        description: rec.description,
+        supportingData: rec.supportingData,
+        confidenceLevel: Number(rec.confidenceLevel),
+        generatedDate: rec.generatedDate.toISOString().split('T')[0],
+        predictedImpact: rec.predictedImpact,
+        implementationStatus: rec.implementationStatus || 'pending',
+        principalFeedback: rec.principalFeedback,
+        icon,
+        color,
+        urgencyLevel: urgency
+      };
+    });
+
+    console.log('✅ Transformed recommendations:', transformedRecommendations.length);
+
+    // Calculate stats if needed
+    const stats = await this.getRecommendationStats(schoolId);
+    
+    console.log('📈 Stats:', stats);
+
+    return {
+      success: true,
+      data: transformedRecommendations,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      stats
+    };
+
+  } catch (error: any) {
+    console.error('💥 Service getRecommendations error:', error);
+    return {
+      success: false,
+      data: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      totalPages: 0
+    };
   }
+}
 
   // Get single recommendation by ID
   async getRecommendationById(id: number, schoolId: number): Promise<{

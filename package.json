@@ -16,6 +16,7 @@
     "prisma:seed-teacher-evaluation": "tsx prisma/seed-teacher-evaluation.ts",
     "prisma:seed-resource": "tsx prisma/seed-resource.ts",
     "prisma:seed-kpi": "tsx prisma/seed-kpi.ts",
+    "prisma:seed-early": "tsx prisma/seed-early.ts",
     "prisma:reset": "prisma migrate reset && npm run prisma:seed",
     "clean": "rm -rf node_modules package-lock.json && npm install",
     "test:gemini": "tsx src/test/testGemini.ts",

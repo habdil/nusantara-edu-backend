@@ -21,6 +21,7 @@ import financeRoutes from './routes/financeRoutes';
 import facilityRoutes from './routes/facilityRoutes';
 import kpiRoutes from './routes/kpiRoutes';
 import aiRecommendationRoutes from './routes/aiRecommendationRoutes';
+import earlyWarningRoutes from './routes/earlyWarningRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -133,6 +134,7 @@ app.use('/api/facilities', facilityRoutes);
 app.use('/api/kpi', kpiRoutes);
 
 app.use('/api/ai-recommendations', aiRecommendationRoutes);
+app.use('/api/early-warnings', earlyWarningRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
