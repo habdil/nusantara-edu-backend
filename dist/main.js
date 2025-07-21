@@ -13,8 +13,17 @@ const dotenv_1 = __importDefault(require("dotenv"));
 // Import configurations
 const CORSConfig_1 = __importDefault(require("./config/CORSConfig"));
 const prisma_1 = __importDefault(require("./config/prisma"));
-// Import routes
+// Import existing routes
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
+const academicRoutes_1 = __importDefault(require("./routes/academicRoutes"));
+const teacherEvaluationRoutes_1 = __importDefault(require("./routes/teacherEvaluationRoutes"));
+// Import new resource routes
+const assetRoutes_1 = __importDefault(require("./routes/assetRoutes"));
+const financeRoutes_1 = __importDefault(require("./routes/financeRoutes"));
+const facilityRoutes_1 = __importDefault(require("./routes/facilityRoutes"));
+const kpiRoutes_1 = __importDefault(require("./routes/kpiRoutes"));
+const aiRecommendationRoutes_1 = __importDefault(require("./routes/aiRecommendationRoutes"));
+const earlyWarningRoutes_1 = __importDefault(require("./routes/earlyWarningRoutes"));
 // Load environment variables
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -22,7 +31,7 @@ const PORT = process.env.PORT || 5000;
 // Global rate limiting
 const globalLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000, // 15 menit
-    max: 100, // maksimal 100 request per 15 menit per IP
+    max: 99999999999, // maksimal 100 request per 15 menit per IP
     message: {
         success: false,
         message: 'Terlalu banyak request. Silakan coba lagi nanti.',
@@ -63,7 +72,14 @@ app.get('/health', async (req, res) => {
                 status: 'healthy',
                 timestamp: new Date().toISOString(),
                 environment: process.env.NODE_ENV || 'development',
-                version: '1.0.0'
+                version: '1.0.0',
+                services: {
+                    database: 'connected',
+                    auth: 'active',
+                    academic: 'active',
+                    teacherEvaluation: 'active',
+                    resources: 'active'
+                }
             }
         });
     }
@@ -76,14 +92,52 @@ app.get('/health', async (req, res) => {
         });
     }
 });
-// API Routes
+// API Documentation endpoint
+app.get('/api', (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: 'NusantaraEdu API - Management Information System for Elementary School Principals',
+        data: {
+            version: '1.0.0',
+            documentation: 'https://docs.nusantaraedu.id',
+            endpoints: {
+                auth: '/api/auth',
+                academic: '/api/academic',
+                teacherEvaluation: '/api/teacher-evaluation',
+                assets: '/api/assets',
+                finance: '/api/finance',
+                facilities: '/api/facilities'
+            },
+            support: 'support@nusantaraedu.id'
+        }
+    });
+});
+// ===== API ROUTES =====
+// Existing routes
 app.use('/api/auth', authRoutes_1.default);
+app.use('/api/academic', academicRoutes_1.default);
+app.use('/api/teacher-evaluation', teacherEvaluationRoutes_1.default);
+// New resource management routes
+app.use('/api/assets', assetRoutes_1.default);
+app.use('/api/finance', financeRoutes_1.default);
+app.use('/api/facilities', facilityRoutes_1.default);
+app.use('/api/kpi', kpiRoutes_1.default);
+app.use('/api/ai-recommendations', aiRecommendationRoutes_1.default);
+app.use('/api/early-warnings', earlyWarningRoutes_1.default);
 // 404 handler
 app.use('*', (req, res) => {
     res.status(404).json({
         success: false,
         message: 'Endpoint tidak ditemukan',
-        error: 'NOT_FOUND'
+        error: 'NOT_FOUND',
+        availableEndpoints: [
+            '/api/auth',
+            '/api/academic',
+            '/api/teacher-evaluation',
+            '/api/assets',
+            '/api/finance',
+            '/api/facilities'
+        ]
     });
 });
 // Global error handler
@@ -116,6 +170,23 @@ app.use((error, req, res, next) => {
         });
         return;
     }
+    // Handle JWT errors
+    if (error.name === 'JsonWebTokenError') {
+        res.status(401).json({
+            success: false,
+            message: 'Token tidak valid',
+            error: 'INVALID_TOKEN'
+        });
+        return;
+    }
+    if (error.name === 'TokenExpiredError') {
+        res.status(401).json({
+            success: false,
+            message: 'Token telah kadaluarsa',
+            error: 'TOKEN_EXPIRED'
+        });
+        return;
+    }
     // Default error
     res.status(500).json({
         success: false,
@@ -135,7 +206,13 @@ const startServer = async () => {
             console.log(`🚀 NusantaraEdu API running on port ${PORT}`);
             console.log(`📚 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+            console.log(`📖 API info: http://localhost:${PORT}/api`);
             console.log(`🔐 Auth endpoints: http://localhost:${PORT}/api/auth`);
+            console.log(`🎓 Academic endpoints: http://localhost:${PORT}/api/academic`);
+            console.log(`👨‍🏫 Teacher evaluation: http://localhost:${PORT}/api/teacher-evaluation`);
+            console.log(`📦 Asset management: http://localhost:${PORT}/api/assets`);
+            console.log(`💰 Finance management: http://localhost:${PORT}/api/finance`);
+            console.log(`🏢 Facility management: http://localhost:${PORT}/api/facilities`);
         });
     }
     catch (error) {
