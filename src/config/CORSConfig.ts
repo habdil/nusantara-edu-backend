@@ -7,7 +7,7 @@ const allowedOrigins = [
   'http://localhost:5174',
   'https://nusantara-edu.vercel.app',
   'https://dashboard.nusantaraedu.id',
-  'https://nusantara-edu-frontend.vercel.app/'
+  'https://nusantara-edu-frontend.vercel.app'
 ];
 
 export const corsOptions: CorsOptions = {
